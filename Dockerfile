@@ -1,8 +1,8 @@
-FROM node:18 as builder
+FROM node:18
 
-# WORKDIR /app
+WORKDIR /app
 
-# COPY . .
+COPY . .
 
 # 安装依赖
 RUN yarn install
