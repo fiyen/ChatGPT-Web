@@ -19,11 +19,12 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # 设置启动脚本为可执行
-RUN chmod +x start.sh
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
 
 # 暴露容器的80端口
 EXPOSE 80
 
 # 启动Nginx和前端网页
-CMD ["start.sh"]
+CMD ["/start.sh"]
 
