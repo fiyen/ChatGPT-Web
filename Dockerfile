@@ -1,17 +1,29 @@
-# 使用Node.js作为基础镜像
-FROM node:14
+FROM node:18 as builder
 
-# 在容器中创建一个工作目录
 WORKDIR /app
 
-# 将当前目录下的所有文件复制到容器的工作目录中
 COPY . .
 
-# 安装pm2
-RUN npm install pm2 -g
+# 安装依赖
+RUN yarn install
 
-# 进入到server目录
-WORKDIR /app/server
+# 打包
+RUN yarn build
 
-# 启动进程
-CMD ["pm2", "start", "index.js", "--name", "chatweb", "--watch"]
+FROM nginx:latest
+
+# 复制打包好的dist目录到Nginx容器中
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# 复制自定义的Nginx配置文件到容器中
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# 设置启动脚本为可执行
+RUN chmod +x /start.sh
+
+# 暴露容器的80端口
+EXPOSE 80
+
+# 启动Nginx和前端网页
+CMD ["/start.sh"]
+
