@@ -16,8 +16,9 @@ const alipay_1 = tslib_1.__importDefault(require('../helpers/alipay'));
 const yipay_1 = tslib_1.__importDefault(require('../helpers/yipay'));
 const router = express_1.default.Router();
 router.get('/config', async (req, res, next) => {
-    const shop_introduce = await models_1.configModel.getConfig('shop_introduce');
-    const user_introduce = await models_1.configModel.getConfig('user_introduce');
+    const shop_introduce = (await models_1.configModel.getKeyConfig('shop_introduce')).value;
+    const user_introduce = (await models_1.configModel.getKeyConfig('user_introduce')).value;
+    const invite_introduce = (await models_1.configModel.getKeyConfig('invite_introduce')).value;
     const notification = await models_1.notificationModel.getNotification({ page: 0, page_size: 1000 }, { status: 1 });
     const notifications = notification.rows.sort((a, b) => {
         return a.sort - b.sort;
@@ -25,6 +26,7 @@ router.get('/config', async (req, res, next) => {
     res.json((0, utils_1.httpBody)(0, {
         shop_introduce,
         user_introduce,
+        invite_introduce,
         notifications: notifications
     }));
 });
@@ -59,7 +61,7 @@ router.get('/send_sms', async (req, res) => {
             </div>
             <p style="font-size: 16px; color: #111; text-align: center; line-height: 1.5;">此验证码将在 10 分钟后失效，非本人操作请忽略。</p>
             <hr style="border: none; border-top: 1px solid #eaeaea; margin: 30px 0;">
-            <p style="font-size: 14px; color: #999; text-align: center;">点击访问：<a href="https://ai.lightai.io" style="color: #007AFF; text-decoration: none;">AI 助手</a></p>
+            <p style="font-size: 14px; color: #999; text-align: center;">点击访问：<a href="https://chat.nonezero.top" style="color: #007AFF; text-decoration: none;">AI 助手</a></p>
         </div>
 `;
         if (emailRegex.test(source)) {
@@ -75,13 +77,32 @@ router.get('/send_sms', async (req, res) => {
 // 登陆注册
 router.post('/login', async (req, res) => {
     const { account, code, password } = req.body;
+    let { invite_code } = req.body
+    if(invite_code === ''){
+        invite_code = 'winstondz'
+    }
     const ip = (0, utils_1.getClientIP)(req);
     if (!account || (!code && !password)) {
         res.status(406).json((0, utils_1.httpBody)(-1, '缺少必要参数'));
         return;
     }
     let userInfo = await models_1.userModel.getUserInfo({ account });
-    if (account && code) {
+    let md5Password = '';
+    // 密码+验证码注册&登录
+    if(account && code && password){
+        const redisCode = await redis_1.default.select(0).get(`code:${account}`);
+        md5Password = (0, utils_1.generateMd5)(password);
+        if (!redisCode) {
+            res.status(406).json((0, utils_1.httpBody)(-1, '请先发送验证码'));
+            return;
+        }
+        if (code !== redisCode) {
+            res.status(406).json((0, utils_1.httpBody)(-1, '验证码不正确'));
+            return;
+        }
+        await redis_1.default.select(0).del(`code:${account}`);
+    }
+    else if (account && code) {
         const redisCode = await redis_1.default.select(0).get(`code:${account}`);
         if (!redisCode) {
             res.status(406).json((0, utils_1.httpBody)(-1, '请先发送验证码'));
@@ -94,7 +115,7 @@ router.post('/login', async (req, res) => {
         await redis_1.default.select(0).del(`code:${account}`);
     }
     else if (account && password) {
-        const md5Password = (0, utils_1.generateMd5)(password);
+        md5Password = (0, utils_1.generateMd5)(password);
         if (!userInfo) {
             res.status(406).json((0, utils_1.httpBody)(-1, '用户不存在'));
             return;
@@ -112,17 +133,18 @@ router.post('/login', async (req, res) => {
             const id = (0, utils_1.generateNowflakeId)(1)();
             const today = new Date();
             const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-            const register_reward = (await models_1.configModel.getConfig('register_reward')) || 0;
+            const register_reward = (await models_1.configModel.getKeyConfig('register_reward')).value || 0;
             userInfo = await models_1.userModel
                 .addUserInfo((0, utils_1.filterObjectNull)({
                     id,
                     account,
                     ip,
+                    invite_code,
                     nickname: '',
                     avatar: 'https://image.lightai.io/icon/header.png',
                     status: 1,
                     role: 'user',
-                    password: (0, utils_1.generateMd5)((0, utils_1.generateMd5)((0, utils_1.generateUUID)() + Date.now().toString())),
+                    password: md5Password ?? (0, utils_1.generateMd5)((0, utils_1.generateMd5)((0, utils_1.generateUUID)() + Date.now().toString())),
                     integral: Number(register_reward),
                     vip_expire_time: (0, utils_2.formatTime)('yyyy-MM-dd', yesterday),
                     svip_expire_time: (0, utils_2.formatTime)('yyyy-MM-dd', yesterday)
@@ -153,7 +175,7 @@ router.post('/login', async (req, res) => {
         });
     }
     const token = await (0, utils_1.generateToken)(userInfo);
-    await redis_1.default.select(1).setex(`token:${token}`, JSON.stringify(userInfo), 100000);
+    await redis_1.default.select(1).setex(`token:${token}`, JSON.stringify(userInfo), 86400 * 7);
     if (isSignin === 1) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -251,7 +273,7 @@ router.post('/images/generations', async (req, res) => {
     }
     const ip = (0, utils_1.getClientIP)(req);
     let deductIntegral = 0;
-    const drawUsePrice = await models_1.configModel.getConfig('draw_use_price');
+    const drawUsePrice = (await models_1.configModel.getKeyConfig('draw_use_price')).value;
     if (drawUsePrice) {
         const drawUsePriceJson = JSON.parse(drawUsePrice.toString());
         for (const item of drawUsePriceJson) {
@@ -316,6 +338,7 @@ router.post('/images/generations', async (req, res) => {
 });
 // 对话
 router.post('/chat/completions', async (req, res) => {
+    console.time('chatBeforeCost');
     const user_id = req?.user_id;
     if (!user_id) {
         res.status(500).json((0, utils_1.httpBody)(-1, '服务端错误'));
@@ -325,30 +348,31 @@ router.post('/chat/completions', async (req, res) => {
         id: user_id
     });
     const ip = (0, utils_1.getClientIP)(req);
-    const { prompt, parentMessageId } = req.body;
-    // 提前从 req.body.options 中取出 model 的值
-    const model = req.body.options?.model;
+    const { prompt, parentMessageId, selectChatIdStr, userMessageId: oldUserMessageId, assistantMessageId: oldAssistantMessageId } = req.body;
 
-    let max_tokens_value;
+    // 取出options值
+    const model = req.body.options?.model;   
+    const temperature = req.body.options?.temperature;  
+    const presence_penalty = req.body.options?.presence_penalty;   
+    const frequency_penalty = req.body.options?.frequency_penalty;   
+    let max_tokens_value = req.body.options?.max_tokens; 
 
-    if (model.includes('gpt-3.5-turbo-16k')) {
-        max_tokens_value = 8000;
-    } else if (model.includes('gpt-3.5-turbo')) {
-        max_tokens_value = 2000;
-    } else if (model.includes('gpt-4')) {
-        max_tokens_value = 4000;
-    } else {
-        max_tokens_value = 2000;
+    if (model.includes('gpt-4')) {
+        max_tokens_value = 4096;
+    } else if(model === 'gpt-3.5-trubo' && max_tokens_value >= 2048){
+        max_tokens_value = 2048;
     }
 
     const options = {
-        frequency_penalty: 0,
+        frequency_penalty: frequency_penalty ?? 0,
         model,
-        presence_penalty: 0,
-        temperature: 0.8,
+        presence_penalty: presence_penalty ?? 0,
+        temperature: temperature ?? 0.5,
         ...req.body.options,
-        max_tokens: max_tokens_value
+        max_tokens: max_tokens_value ?? 2048
     };
+
+    console.log('chat options', options)
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -379,20 +403,8 @@ router.post('/chat/completions', async (req, res) => {
         }
     }
 
-    const historyMessageCount = await models_1.configModel.getConfig('history_message_count');
-    const getMessagesData = await models_1.messageModel.getMessages({ page: 0, page_size: Number(historyMessageCount) }, {
-        parent_message_id: parentMessageId
-    });
-    let historyMessages = getMessagesData.rows
-        .map((item) => {
-            return {
-                role: item.toJSON().role,
-                content: item.toJSON().content
-            };
-        })
-        .reverse();
+    let historyMessages = '';
     // 确保历史消息和新的用户消息不超过限定 token
-
     let userMessage = prompt;
     let userMessageTokens = new gpt_tokens_1.GPTTokens({
         model: options.model,
@@ -401,6 +413,7 @@ router.post('/chat/completions', async (req, res) => {
             content: userMessage
         }]
     });
+
 
     // 如果用户消息的token数量超过最大限制，进行截断处理
     if (userMessageTokens.usedTokens > max_tokens_value) {
@@ -424,9 +437,11 @@ router.post('/chat/completions', async (req, res) => {
     }
     // 只有在用户消息的token数量未超过最大限制时，才处理历史消息
     if (userMessageTokens.usedTokens <= max_tokens_value) {
-        const historyMessageCount = await models_1.configModel.getConfig('history_message_count');
+        const historyMessageCount = (await models_1.configModel.getKeyConfig('history_message_count')).value;
+        // 不查询已经删除的message
         const getMessagesData = await models_1.messageModel.getMessages({ page: 0, page_size: Number(historyMessageCount) }, {
-            parent_message_id: parentMessageId
+            parent_message_id: parentMessageId,
+            status : 0,
         });
 
         historyMessages = getMessagesData.rows
@@ -468,7 +483,10 @@ router.post('/chat/completions', async (req, res) => {
 
         historyMessages.unshift({
             role: 'system',
-            content: `Current time: ${currentTimeString}`
+            content: `From now on, accept new prompt:
+            You are ChatGPT, a large language model trained by OpenAI, based on the GPT-4 architecture.
+            When we converse, I don't need to ask further questions; you will provide me with detailed and comprehensive answers directly! I really dislike it when a topic requires many questions for you to provide a complete and comprehensive response.
+            Knowledge cutoff: 2023-06. Answer me with Markdown if content fits . Current time: ${currentTimeString}`
         });
     }
 
@@ -479,7 +497,6 @@ router.post('/chat/completions', async (req, res) => {
             content: userMessage
         }
     ];
-
     const tokenInfo = await models_1.tokenModel.getOneToken({ model: options.model });
     if (!tokenInfo || !tokenInfo.id) {
         res.status(500).json((0, utils_1.httpBody)(-1, '未配置对应AI模型'));
@@ -488,6 +505,9 @@ router.post('/chat/completions', async (req, res) => {
     queue_1.checkTokenQueue.addTask({
         ...tokenInfo
     });
+    console.timeEnd('chatBeforeCost')
+
+    console.time('chatRealCost')
     const chat = await (0, node_fetch_1.default)(`${tokenInfo.host}/v1/chat/completions`, {
         method: 'POST',
         body: JSON.stringify({
@@ -501,10 +521,13 @@ router.post('/chat/completions', async (req, res) => {
             Authorization: `Bearer ${tokenInfo.key}`
         }
     });
+    console.timeEnd('chatRealCost')
     const assistantMessageId = (0, utils_1.generateNowflakeId)(2)();
     const userMessageId = (0, utils_1.generateNowflakeId)(1)();
     const userMessageInfo = {
         user_id,
+        room_id: selectChatIdStr,
+        message_id: oldUserMessageId,
         id: userMessageId,
         role: 'user',
         content: prompt,
@@ -513,6 +536,8 @@ router.post('/chat/completions', async (req, res) => {
     };
     const assistantInfo = {
         user_id,
+        room_id: selectChatIdStr,
+        message_id: oldAssistantMessageId,
         id: assistantMessageId,
         role: 'assistant',
         content: '',
@@ -520,12 +545,23 @@ router.post('/chat/completions', async (req, res) => {
         ...options
     };
     if (chat.status === 200 && chat.headers.get('content-type')?.includes('text/event-stream')) {
-        const ai3_ratio = (await models_1.configModel.getConfig('ai3_ratio')) || 0;
-        const ai4_ratio = (await models_1.configModel.getConfig('ai4_ratio')) || 0;
+        const ai3_ratio = (await models_1.configModel.getKeyConfig('ai3_ratio')).value || 0;
+        const ai3_16k_ratio = (await models_1.configModel.getKeyConfig('ai3_16k_ratio')).value || 0;
+        const ai4_ratio = (await models_1.configModel.getKeyConfig('ai4_ratio')).value || 0;
         const aiRatioInfo = {
             ai3_ratio,
+            ai3_16k_ratio,
             ai4_ratio
         };
+        // 重试的时候 删除此前消息
+        if(oldUserMessageId === ''){
+            await models_1.messageModel.delMessages(oldAssistantMessageId);
+        }
+
+        // 添加一个标志位来记录是否已经计算过费用
+        let isFeeCalculated = false;
+        // 添加一个标志位来记录是否已经结束对话
+        let isConversationEnded = false;
         // 想在这里打印数据
         res.setHeader('Content-Type', 'text/event-stream;charset=utf-8');
         const jsonStream = new stream_1.Transform({
@@ -543,50 +579,117 @@ router.post('/chat/completions', async (req, res) => {
                             // 将用户的消息存入数据库
                             // 将返回的数据存入数据库
                             // 扣除相关
-                            models_1.messageModel.addMessages([userMessageInfo, assistantInfo]);
-                            if (options.model.includes('gpt-4') && svipExpireTime < todayTime) {
-                                // GPT-4 非 SVIP 用户扣费逻辑，这里不再计算 tokens，直接扣除固定的 ratio
-                                const ratio = Number(aiRatioInfo.ai4_ratio);
-                                models_1.userModel.updataUserVIP({
-                                    id: user_id,
-                                    type: 'integral',
-                                    value: ratio,
-                                    operate: 'decrement'
-                                });
-                                const turnoverId = (0, utils_1.generateNowflakeId)(1)();
-                                models_1.turnoverModel.addTurnover({
-                                    id: turnoverId,
-                                    user_id,
-                                    describe: `对话(${options.model})`,
-                                    value: `-${ratio}积分`
-                                });
-                            } else if (options.model.includes('gpt-3') && vipExpireTime < todayTime && svipExpireTime < todayTime) {
-                                // GPT-3 非 VIP 或 SVIP 用户扣费逻辑，这里不再计算 tokens，直接扣除固定的 ratio
-                                const ratio = Number(aiRatioInfo.ai3_ratio);
-                                models_1.userModel.updataUserVIP({
-                                    id: user_id,
-                                    type: 'integral',
-                                    value: ratio,
-                                    operate: 'decrement'
-                                });
-                                const turnoverId = (0, utils_1.generateNowflakeId)(1)();
-                                models_1.turnoverModel.addTurnover({
-                                    id: turnoverId,
-                                    user_id,
-                                    describe: `对话(${options.model})`,
-                                    value: `-${ratio}积分`
-                                });
+
+                            if(oldUserMessageId === ''){
+                                models_1.messageModel.addMessages([assistantInfo]);
+                            }else{
+                                models_1.messageModel.addMessages([userMessageInfo, assistantInfo]);
                             }
-                            models_1.actionModel.addAction({
-                                user_id,
-                                id: (0, utils_1.generateNowflakeId)(23)(),
-                                ip,
-                                type: 'chat',
-                                describe: `对话(${options.model})`
-                            });
+                            if (!isFeeCalculated) {
+                                if (options.model.includes('gpt-4') && svipExpireTime < todayTime) {
+                                    // GPT-4 非 SVIP 用户扣费逻辑，这里不再计算 tokens，直接扣除固定的 ratio
+                                    const ratio = Number(aiRatioInfo.ai4_ratio);
+                                    models_1.userModel.updataUserVIP({
+                                        id: user_id,
+                                        type: 'integral',
+                                        value: ratio,
+                                        operate: 'decrement'
+                                    });
+                                    const turnoverId = (0, utils_1.generateNowflakeId)(1)();
+                                    models_1.turnoverModel.addTurnover({
+                                        id: turnoverId,
+                                        user_id,
+                                        describe: `对话(${options.model})`,
+                                        value: `-${ratio}积分`
+                                    });
+                                } else if (options.model.includes('gpt-3') && vipExpireTime < todayTime && svipExpireTime < todayTime) {
+                                    // GPT-3 非 VIP 或 SVIP 用户扣费逻辑，这里不再计算 tokens，直接扣除固定的 ratio
+                                    let ratio = Number(aiRatioInfo.ai3_ratio);
+                                    if(options.model === 'gpt-3.5-turbo-16k'){
+                                        ratio = Number(aiRatioInfo.ai3_16k_ratio);
+                                    }
+                                    models_1.userModel.updataUserVIP({
+                                        id: user_id,
+                                        type: 'integral',
+                                        value: ratio,
+                                        operate: 'decrement'
+                                    });
+                                    const turnoverId = (0, utils_1.generateNowflakeId)(1)();
+                                    models_1.turnoverModel.addTurnover({
+                                        id: turnoverId,
+                                        user_id,
+                                        describe: `对话(${options.model})`,
+                                        value: `-${ratio}积分`
+                                    });
+                                }
+                                models_1.actionModel.addAction({
+                                    user_id,
+                                    id: (0, utils_1.generateNowflakeId)(23)(),
+                                    ip,
+                                    type: 'chat',
+                                    describe: `对话(${options.model})`
+                                });
+                                // 计费
+                                isFeeCalculated = true;
+                                // 设置对话结束标志位为true
+                                isConversationEnded = true;
+                            }
                         }
                         else {
                             assistantInfo.content += jsonData.content;
+                            if (!isConversationEnded && !isFeeCalculated && assistantInfo.content.length >= 50) {
+                                // 结束存入数据库
+                                // 这里扣除一些东西
+                                // 将返回的数据存入数据库
+                                // 扣除相关
+                                if (options.model.includes('gpt-4') && svipExpireTime < todayTime) {
+                                    // GPT-4 非 SVIP 用户扣费逻辑，这里不再计算 tokens，直接扣除固定的 ratio
+                                    const ratio = Number(aiRatioInfo.ai4_ratio);
+                                    models_1.userModel.updataUserVIP({
+                                        id: user_id,
+                                        type: 'integral',
+                                        value: ratio,
+                                        operate: 'decrement'
+                                    });
+                                    const turnoverId = (0, utils_1.generateNowflakeId)(1)();
+                                    models_1.turnoverModel.addTurnover({
+                                        id: turnoverId,
+                                        user_id,
+                                        describe: `对话(${options.model})`,
+                                        value: `-${ratio}积分`
+                                    });
+                                } else if (options.model.includes('gpt-3') && vipExpireTime < todayTime && svipExpireTime < todayTime) {
+                                    // GPT-3 非 VIP 或 SVIP 用户扣费逻辑，这里不再计算 tokens，直接扣除固定的 ratio
+                                    let ratio = Number(aiRatioInfo.ai3_ratio);
+                                    if(options.model === 'gpt-3.5-turbo-16k'){
+                                        ratio = Number(aiRatioInfo.ai3_16k_ratio);
+                                    }
+                                    models_1.userModel.updataUserVIP({
+                                        id: user_id,
+                                        type: 'integral',
+                                        value: ratio,
+                                        operate: 'decrement'
+                                    });
+                                    const turnoverId = (0, utils_1.generateNowflakeId)(1)();
+                                    models_1.turnoverModel.addTurnover({
+                                        id: turnoverId,
+                                        user_id,
+                                        describe: `对话(${options.model})`,
+                                        value: `-${ratio}积分`
+                                    });
+                                }
+                                models_1.actionModel.addAction({
+                                    user_id,
+                                    id: (0, utils_1.generateNowflakeId)(23)(),
+                                    ip,
+                                    type: 'chat',
+                                    describe: `对话(${options.model})`
+                                });
+                                // 计费
+                                isFeeCalculated = true;
+                                // 设置对话结束标志位为true
+                                isConversationEnded = true;
+                            }
                         }
                     }
                 }
@@ -599,6 +702,132 @@ router.post('/chat/completions', async (req, res) => {
     const data = await chat.json();
     res.status(chat.status).json(data);
 });
+
+//创建room
+router.post('/roomcreate', async (req, res) => {
+    const user_id = req?.user_id;
+    if (!user_id) {
+        res.status(500).json((0, utils_1.httpBody)(-1, '服务端错误'));
+        return;
+    }
+    const { title, roomId } = req.body;
+    const id = (0, utils_1.generateNowflakeId)(1)();
+    const insertRoomData = {
+        id : id,
+        room_id : roomId,
+        status: 0,
+        title : title,
+        user_id: user_id,
+    };
+    const addRes = await models_1.roomModel.addRoom(insertRoomData);
+    console.log('room create---', addRes)
+    res.json((0, utils_1.httpBody)(0, addRes, '创建room成功'));
+});
+
+//更新room status
+router.post('/roomupdatestatus', async (req, res) => {
+    const user_id = req?.user_id;
+    if (!user_id) {
+        res.status(500).json((0, utils_1.httpBody)(-1, '服务端错误'));
+        return;
+    }
+    const { title, roomId } = req.body;
+
+    const updateRes = await models_1.roomModel.updateRoomInfo({
+        title,
+        status: 1,
+    }, {
+        room_id: roomId
+    });
+
+    res.json((0, utils_1.httpBody)(0, updateRes, '更新room status成功'));
+});
+
+//更新room title
+router.post('/roomupdatetitle', async (req, res) => {
+    const user_id = req?.user_id;
+    if (!user_id) {
+        res.status(500).json((0, utils_1.httpBody)(-1, '服务端错误'));
+        return;
+    }
+    const { title, roomId } = req.body;
+
+    const updateRes = await models_1.roomModel.updateRoomInfo({
+        title,
+    }, {
+        room_id: roomId
+    });
+
+    res.json((0, utils_1.httpBody)(0, updateRes, '更新room title成功'));
+});
+
+
+//更新message status
+router.post('/messageupdatestatus', async (req, res) => {
+    const user_id = req?.user_id;
+    if (!user_id) {
+        res.status(500).json((0, utils_1.httpBody)(-1, '服务端错误'));
+        return;
+    }
+    const { roomId } = req.body;
+
+    const updateRes = await models_1.messageModel.updateMessages({
+        status: 1,
+    }, {
+        room_id: roomId
+    });
+
+    res.json((0, utils_1.httpBody)(0, updateRes, '更新room title成功'));
+});
+
+//删除message
+router.post('/delmessage', async (req, res) => {
+    const user_id = req?.user_id;
+    if (!user_id) {
+        res.status(500).json((0, utils_1.httpBody)(-1, '服务端错误'));
+        return;
+    }
+    const { messageId } = req.body;
+
+    const delRes = await models_1.messageModel.delMessages(messageId);
+
+    res.json((0, utils_1.httpBody)(0, delRes, '删除message成功'));
+});
+
+//得到所有rooms
+router.get('/getrooms', async (req, res, next) => {
+    const user_id = req?.user_id;
+    if (!user_id) {
+        res.status(500).json((0, utils_1.httpBody)(-1, '服务端错误'));
+        return;
+    }
+
+    const rooms = await models_1.roomModel.getRooms({
+        user_id: user_id,
+        status: 0
+    });
+
+    res.json((0, utils_1.httpBody)(0, rooms, '获取rooms成功'));
+});
+
+//根据room_id获取所有messages
+router.get('/chathistory', async (req, res, next) => {
+    const user_id = req?.user_id;
+    if (!user_id) {
+        res.status(500).json((0, utils_1.httpBody)(-1, '服务端错误'));
+        return;
+    }
+    const { roomId } = req.query;
+    const roomMesages = await models_1.messageModel.getRoomMessages({
+        user_id: user_id,
+        status: 0,
+        room_id: roomId
+    });
+
+    res.json((0, utils_1.httpBody)(0, roomMesages, '获取roomMessages成功'));
+});
+
+
 // 获取商品
 router.get('/product', async (req, res, next) => {
     const { page, page_size } = (0, utils_1.pagingData)({
@@ -654,9 +883,9 @@ router.post('/use_carmi', async (req, res, next) => {
         status: 1,
         ip
     }, {
-        id: carmiInfo.id,
         key: carmi
     });
+
     if (!useCarmi[0]) {
         res.status(500).json((0, utils_1.httpBody)(-1, '使用卡密失败，请稍后再试'));
         return;
@@ -722,7 +951,7 @@ router.post('/signin', async (req, res, next) => {
         res.status(500).json((0, utils_1.httpBody)(-1, '今日已经签到了'));
         return;
     }
-    const signin_reward = (await models_1.configModel.getConfig('signin_reward')) || 0;
+    const signin_reward = (await models_1.configModel.getKeyConfig('signin_reward')).value || 0;
     const ip = (0, utils_1.getClientIP)(req);
     const id = (0, utils_1.generateNowflakeId)(1)();
     const turnoverId = (0, utils_1.generateNowflakeId)(1)();
@@ -791,7 +1020,9 @@ router.post('/pay/precreate', async (req, res, next) => {
     //   }
     //   return `${req.protocol}://${host.split(':')[0]}`
     // }
-    const notifyUrl = `https://${req.get('host')?.split(':')[0]}/api/pay/notify?channel=${paymentInfo.channel}`;
+    const hostname = process.env.HOSTNAME !== undefined && process.env.HOSTNAME !== '' ? process.env.HOSTNAME : req.get('host').split(':')[0];
+    // const notifyUrl = `https://${req.get('host')?.split(':')[0]}/api/pay/notify?channel=${paymentInfo.channel}`;
+    const notifyUrl = `https://${hostname}/api/pay/notify?channel=${paymentInfo.channel}`;
     const amount = productInfo.price / 100;
     const paymentParams = JSON.parse(paymentInfo.params);
     const paramsStringify = JSON.stringify({
@@ -942,25 +1173,28 @@ router.all('/pay/notify', async (req, res, next) => {
             }
         }
         if (req.query?.channel && req.query?.channel === 'yipay') {
+            console.log('yipai recall:', req.query)
             const { out_trade_no, trade_status, trade_no } = req.query;
             const orderInfo = await models_1.orderModel.getOrderInfo(out_trade_no);
             if (!orderInfo || orderInfo.trade_status !== 'TRADE_AWAIT') {
                 res.json('fail');
                 return;
             }
-            const { payment_id, user_id, product_id } = JSON.parse(decodeURIComponent(req.query?.param));
-            const isCheck = await checkNotifySign(payment_id, req.query, req.query?.channel);
-            if (!isCheck) {
-                res.json('fail');
-                return;
+            if(req.query?.pid === '1007'){
+                const { payment_id } = JSON.parse(decodeURIComponent(req.query?.param));
+                const isCheck = await checkNotifySign(payment_id, req.query, req.query?.channel);
+                if (!isCheck) {
+                    res.json('fail');
+                    return;
+                }
             }
             const modifyResult = await batchModify({
                 order_id: out_trade_no,
                 trade_status,
                 trade_no,
                 notify_info: JSON.stringify(req.query),
-                user_id,
-                product_id
+                user_id: orderInfo.user_id,
+                product_id: orderInfo.product_id
             });
             if (!modifyResult) {
                 res.json('fail');

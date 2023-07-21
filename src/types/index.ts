@@ -4,6 +4,7 @@ export interface RequestLoginParams {
   account: string
   code?: string | number
   password?: string
+  invite_code?: string
 }
 
 export interface UserInfo {
@@ -17,6 +18,7 @@ export interface UserInfo {
   svip_expire_time: string
   ip: string
   status: number
+  invite_code?: string
   create_time: string
   update_time: string
   is_signin: number
@@ -60,6 +62,9 @@ export interface RequestChatOptions {
   prompt: string
   options?: Omit<ChatGptConfig, 'api' | 'api_key'>
   parentMessageId?: string
+  selectChatIdStr?: string
+  userMessageId?: string
+  assistantMessageId?: string
 }
 
 // 请求Openai 或者 其他代理
@@ -97,7 +102,7 @@ export interface ChatResultInfo {
 
 // 对话记录
 export interface ChatGpt {
-  id: string | number
+  id: string
   text: string
   dateTime: string
   status: 'pass' | 'loading' | 'error'
@@ -149,6 +154,34 @@ export interface TurnoverInfo {
   user_id: string
   value: string
   describe: string
+  create_time: string
+  update_time: string
+}
+
+export interface RoomInfo {
+  id: string
+  create_time: string
+  room_id: string
+  status: number
+  title: string
+  user_id: string
+}
+
+export interface MessageInfo {
+  id: string
+  user_id: string
+  content: string
+  role: string
+  frequency_penalty: number
+  max_tokens: number
+  model: string
+  presence_penalty: string
+  temperature: number
+  parent_message_id: string
+  room_id: string
+  message_id: string
+  status: number
+  title: string
   create_time: string
   update_time: string
 }

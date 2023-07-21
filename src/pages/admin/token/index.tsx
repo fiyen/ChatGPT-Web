@@ -11,6 +11,10 @@ const modelsAll = [
         value: 'gpt-4'
     },
     {
+        label: 'gpt-4-32k',
+        value: 'gpt-4-32k'
+    },
+    {
         label: 'gpt-3.5-turbo',
         value: 'gpt-3.5-turbo'
     },
@@ -89,9 +93,9 @@ function TokenPage() {
         },
         {
             title: '操作',
-            width: 160,
+            width: 150,
             valueType: 'option',
-            fixed: 'right',
+            fixed: window.innerWidth <= 768 ? undefined : 'right', // 根据屏幕宽度动态设置 fixed 属性
             render: (_, data) => [
                 <Button
                     key="edit"

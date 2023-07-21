@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { ChatGpt, ChatsInfo } from '@/types'
 import { formatTime, generateChatInfo } from '@/utils'
+import { postRoomCreate, postRoomUpdateStatus, postRoomUpdateTitle, postMessageUpdateStatus, getRooms, postDelMessage } from '@/request/api'
+import { getMysqlChats, getNowChats } from '../user/async'
+
 
 export interface ChatState {
   // 聊天对话
@@ -32,6 +35,9 @@ export interface ChatState {
   clearChatMessage: (id: string | number) => void
   // 删除某条消息
   delChatMessage: (id: string | number, messageId: string | number) => void
+  
+  // 更新chats
+  updateChats: (mysqlChats: any) => void
 }
 
 const chatStore = create<ChatState>()(
@@ -42,6 +48,11 @@ const chatStore = create<ChatState>()(
       addChat: () =>
         set((state: ChatState) => {
           const info = generateChatInfo()
+          // 新增room
+          postRoomCreate({ title: 'New Chat', roomId: info.id })
+            .then((res) => {
+              if (res.code) return
+            })
           const newChats = [...state.chats]
           newChats.unshift({ ...info })
           return {
@@ -52,20 +63,34 @@ const chatStore = create<ChatState>()(
       delChat: (id) =>
         set((state: ChatState) => {
           const newChats = state.chats.filter((c) => c.id !== id)
-          if (state.chats.length <= 1) {
-            const info = generateChatInfo()
-            return {
-              chats: [{ ...info }],
-              selectChatId: info.id
-            }
-          }
+          const nowChat = state.chats.filter((c) => c.id === id)
+          // 更新room库status为1
+          postRoomUpdateStatus({ roomId: id.toString() })
+          const newId = newChats[0].id
+          // 查找mysql中对话rooms
+          getMysqlChats(newId.toString()).then(mysqlChats => {
+            state.chats = mysqlChats;
+          })
           return {
-            selectChatId: state.chats[1].id,
-            chats: [...newChats]
+            selectChatId: state.chats[0].id,
+            chats: newChats
           }
         }),
       clearChats: () =>
-        set(() => {
+        set((state: ChatState) => {
+          // 更新所有room对话status=1
+          const newChats = state.chats.map((c) => {
+          // 更新room库status为1
+          postRoomUpdateStatus({ roomId: c.id.toString() })
+            .then((res) => {
+              if (res.code) return
+            })
+          // 更新message表所有roomId下的status = 1
+          postMessageUpdateStatus({ roomId: c.id.toString() })
+          .then((res) => {
+            if (res.code) return
+          })
+          })
           const info = generateChatInfo()
           return {
             chats: [{ ...info }],
@@ -73,13 +98,22 @@ const chatStore = create<ChatState>()(
           }
         }),
       changeSelectChatId: (id) =>
-        set(() => ({
-          selectChatId: id
-        })),
+        set((state: ChatState) => {
+          // 查找mysql中对话rooms
+          getMysqlChats(id.toString()).then(mysqlChats => {
+            state.chats = mysqlChats;
+          })
+          return {
+            // chats: newChats,
+            selectChatId: id
+          }
+        }),
       delChatMessage: (id, messageId) =>
         set((state: ChatState) => {
           const newChats = state.chats.map((c) => {
             if (c.id === id) {
+              // mysql删除消息
+              postDelMessage({ messageId: messageId.toString() })
               const newData = c.data.filter((d) => d.id !== messageId)
               return {
                 ...c,
@@ -96,6 +130,14 @@ const chatStore = create<ChatState>()(
         set((state: ChatState) => {
           const newChats = state.chats.map((c) => {
             if (c.id === id) {
+
+              // 更新message表
+              postMessageUpdateStatus({ roomId: c.id.toString() })
+                .then((res) => {
+                  if (res.code) return
+                })
+              
+
               return {
                 ...c,
                 parentMessageId: '',
@@ -115,6 +157,12 @@ const chatStore = create<ChatState>()(
           const newChats = state.chats.map((item) => {
             if (item.id === id) {
               const name = item.data.length <= 0 && data?.text ? data.text : item.name
+
+              // 更新room表title为当前name
+              postRoomUpdateTitle({ title: item.name ?? 'New Chat',roomId: id.toString() })
+                .then((res) => {
+                  if (res.code) return
+                })
               return {
                 ...item,
                 name,
@@ -141,7 +189,6 @@ const chatStore = create<ChatState>()(
                 }
                 return m
               })
-
               const dataFilter = newData.filter((d) => d.id === messageId)
               const chatData = { id: messageId, ...info } as ChatGpt
               return {
@@ -155,7 +202,14 @@ const chatStore = create<ChatState>()(
           return {
             chats: newChats
           }
-        })
+        }),
+      // ...其他方法...
+      updateChats: (mysqlChats: any) => {
+        set((state: ChatState) => ({
+          ...state,
+          chats: mysqlChats
+        }));
+      }
     }),
     {
       name: 'chat_storage', // name of item in the storage (must be unique)

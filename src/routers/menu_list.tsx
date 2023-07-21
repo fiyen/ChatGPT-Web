@@ -1,5 +1,6 @@
 import {
   CommentOutlined,
+  ContactsFilled,
   CrownFilled,
   ExperimentFilled,
   FileTextFilled,
@@ -19,6 +20,7 @@ import {
   ShopFilled,
   ShopOutlined,
   SmileFilled,
+  UsergroupAddOutlined,
   WalletFilled
 } from '@ant-design/icons'
 
@@ -41,12 +43,18 @@ const web = [
     icon: <ShopOutlined />,
     message: '账户余额和充值套餐记录'
   },
- {
-     path: 'https://github.com/vastxie/ChatGpt-Web',
-    name: '项目地址',
-     icon: <GithubOutlined />,
-     message: '免费开源可商业化AIWeb项目'
-  }
+  {
+    path: '/user',
+    name: '用户',
+    icon: <UsergroupAddOutlined />,
+    message: '用户信息'
+  },
+//  {
+//      path: 'https://github.com/Winston1011/ChatGPT-Web',
+//     name: '项目地址',
+//      icon: <GithubOutlined />,
+//      message: '免费开源可商业化AIWeb项目'
+//   }
 ]
 
 const admin = {
@@ -97,7 +105,12 @@ const admin = {
           path: '/admin/signin',
           name: '签到记录',
           icon: <ScheduleFilled />
-        }
+        },
+        {
+          path: '/admin/invite',
+          name: '邀请记录',
+          icon: <ContactsFilled />
+        },
       ]
     },
     {
@@ -144,11 +157,11 @@ const admin = {
         path: '/admin/notification',
 		icon: <NotificationFilled />
     },
-    {
-      path: 'https://github.com/vastxie/ChatGpt-Web',
-      name: 'Github',
-      icon: <GithubFilled />
-    }
+    // {
+    //   path: 'https://github.com/Winston1011/ChatGPT-Web',
+    //   name: 'Github',
+    //   icon: <GithubFilled />
+    // }
   ]
 }
 
