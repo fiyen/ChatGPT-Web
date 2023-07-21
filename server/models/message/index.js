@@ -7,7 +7,33 @@ async function addMessages(datas) {
     const captains = await mysql_2.default.bulkCreate([...datas]);
     return captains;
 }
+async function delMessages(message_id) {
+    const del = await mysql_2.default.destroy({
+        where: {
+            message_id
+        }
+    });
+    return del;
+}
+
 async function getMessages({ page, page_size }, where) {
+    // mysql_2.default.belongsTo(mysql_1.default, { foreignKey: 'user_id', targetKey: 'id' });
+    const find = await mysql_2.default.findAndCountAll({
+        where,
+        // include: [
+        //     {
+        //         model: mysql_1.default,
+        //         required: false,
+        //     }
+        // ],
+        order: [['create_time', 'DESC']],
+        offset: page < 1 ? page * page_size : (page - 1) * page_size,
+        limit: page_size
+    });
+    return find;
+}
+
+async function getAdminMessages({ page, page_size }, where) {
     mysql_2.default.belongsTo(mysql_1.default, { foreignKey: 'user_id', targetKey: 'id' });
     const find = await mysql_2.default.findAndCountAll({
         where,
@@ -18,13 +44,35 @@ async function getMessages({ page, page_size }, where) {
             }
         ],
         order: [['create_time', 'DESC']],
-        offset: page * page_size,
+        offset: page < 1 ? page * page_size : (page - 1) * page_size,
         limit: page_size
     });
     return find;
 }
+
+async function getRoomMessages(where) {
+    const find = await mysql_2.default.findAndCountAll({
+        where,
+        order: [['create_time', 'ASC']],
+    });
+    return find;
+}
+
+async function updateMessages(data, where) {
+    const update = await mysql_2.default.update(data, {
+        where: {
+            ...where
+        }
+    });
+    return update;
+}
+
 exports.default = {
     addMessages,
-    getMessages
+    getMessages,
+    updateMessages,
+    getRoomMessages,
+    getAdminMessages,
+    delMessages
 };
 //# sourceMappingURL=index.js.map

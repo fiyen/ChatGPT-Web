@@ -3,6 +3,28 @@ export interface Paging {
   page_size: number
 }
 
+export interface GetMessageParam {
+  page: number
+  page_size: number
+  account?: string,
+  createTimeStart?: string,
+  createTimeEnd?: string,
+}
+
+export interface GetUserParam {
+  page: number
+  page_size: number
+  account?: string,
+  scoreMin?: number,
+  scoreMax?: number,
+  createTimeStart?: string,
+  createTimeEnd?: string,
+  vipTimeStart?: string,
+  vipTimeEnd?: string,
+  svipTimeStart?: string,
+  svipTimeEnd?: string,
+}
+
 export interface TableData<T> {
   count: number
   rows: T
@@ -169,6 +191,23 @@ export interface NotificationInfo {
   title: string
   content: string
   sort: number
+  status: number
+  create_time: string
+  update_time: string
+}
+
+export interface InviteRecordInfo {
+  id: string
+  user_id: string
+  invite_code: string
+  superior_id: string
+  reward: string
+  reward_type: string
+  user_agent: string
+  remarks: string
+  user: UserInfo
+  superior: UserInfo
+  ip: string
   status: number
   create_time: string
   update_time: string

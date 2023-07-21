@@ -1,6 +1,8 @@
+/* eslint-disable no-prototype-builtins */
+/* eslint-disable no-console */
 import { CommentOutlined, DeleteOutlined } from '@ant-design/icons'
 import { Button, Modal, Popconfirm, Space, Tabs, Select, message } from 'antd'
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import styles from './index.module.less'
 import { chatStore, configStore, userStore } from '@/store'
@@ -8,13 +10,15 @@ import RoleNetwork from './components/RoleNetwork'
 import RoleLocal from './components/RoleLocal'
 import AllInput from './components/AllInput'
 import ChatMessage from './components/ChatMessage'
-import { RequestChatOptions } from '@/types'
+import { ChatGpt, RequestChatOptions } from '@/types'
 import { postChatCompletions } from '@/request/api'
 import Reminder from '@/components/Reminder'
 import { filterObjectNull, formatTime, generateUUID, handleChatData } from '@/utils'
 import { useScroll } from '@/hooks/useScroll'
 import useDocumentResize from '@/hooks/useDocumentResize'
 import Layout from '@/components/Layout'
+import { getMysqlChats } from '@/store/user/async'
+import LoadingModal from '@/components/LoadingModal'
 
 function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -31,7 +35,8 @@ function ChatPage() {
     setChatInfo,
     setChatDataInfo,
     clearChatMessage,
-    delChatMessage
+    delChatMessage,
+    updateChats
   } = chatStore()
 
   const bodyResize = useDocumentResize()
@@ -40,6 +45,25 @@ function ChatPage() {
   const [roleConfigModal, setRoleConfigModal] = useState({
     open: false
   })
+  const [loading, setLoading] = useState(false);
+
+  const handleMenuClick = (r: { key: string }) => {
+    const id = r.key.replace('/', '');
+    setLoading(true); // 设置 loading 为 true
+    getMysqlChats(id)
+      .then((mysqlChats) => {
+        updateChats(mysqlChats);
+      })
+      .catch((error) => {
+        console.error(error);
+      })
+      .finally(() => {
+        setLoading(false); // 设置 loading 为 false
+      });
+    if (selectChatId !== id) {
+      changeSelectChatId(id);
+    }
+  };
 
   useLayoutEffect(() => {
     if (scrollRef) {
@@ -55,6 +79,7 @@ function ChatPage() {
     }
     return chatList[0].data
   }, [selectChatId, chats])
+
 
   // 创建对话按钮
   const CreateChat = () => {
@@ -82,19 +107,25 @@ function ChatPage() {
     )
   }
 
+
   // 对接服务端方法
   async function serverChatCompletions({
     requestOptions,
     signal,
     userMessageId,
-    assistantMessageId
+    assistantMessageId,
   }: {
     userMessageId: string
     signal: AbortSignal
     requestOptions: RequestChatOptions
     assistantMessageId: string
   }) {
-    const response = await postChatCompletions(requestOptions, {
+    const newRequestOptions = {
+      ...requestOptions,
+      userMessageId: userMessageId,
+      assistantMessageId: assistantMessageId,
+    };
+    const response = await postChatCompletions(newRequestOptions, {
       options: {
         signal
       }
@@ -109,15 +140,16 @@ function ChatPage() {
 
     if (!(response instanceof Response)) {
       // 这里返回是错误 ...
-      setChatDataInfo(selectChatId, userMessageId, {
-        status: 'error'
-      })
+      console.log('这里是：', userMessageId)
+      if (userMessageId) {
+        setChatDataInfo(selectChatId, userMessageId, {
+          status: 'error'
+        })
+      }
+
       setChatDataInfo(selectChatId, assistantMessageId, {
         status: 'error',
-        text: `\`\`\`json
-${JSON.stringify(response, null, 4)}
-\`\`\`
-`
+        text: response?.message || '❌ 请求异常，请稍后在尝试。'
       })
       fetchController?.abort()
       setFetchController(null)
@@ -179,37 +211,54 @@ ${JSON.stringify(response, null, 4)}
   const [fetchController, setFetchController] = useState<AbortController | null>(null)
 
   // 对话
-  async function sendChatCompletions(vaule: string) {
+  async function sendChatCompletions(vaule: string, refurbishOptions?: ChatGpt) {
     if (!token) {
       setLoginModal(true)
       return
     }
-    const parentMessageId = chats.filter((c) => c.id === selectChatId)[0].id
-    const userMessageId = generateUUID()
+    const selectChatIdStr = selectChatId.toString()
+    const parentMessageId =
+      refurbishOptions?.requestOptions.parentMessageId ||
+      chats.filter((c) => c.id === selectChatId)[0].id
+    let userMessageId = generateUUID()
     const requestOptions = {
       prompt: vaule,
       parentMessageId,
+      selectChatIdStr,
       options: filterObjectNull({
-        ...config
+        ...config,
+        ...refurbishOptions?.requestOptions.options
       })
     }
-    setChatInfo(selectChatId, {
-      id: userMessageId,
-      text: vaule,
-      dateTime: formatTime(),
-      status: 'pass',
-      role: 'user',
-      requestOptions
-    })
-    const assistantMessageId = generateUUID()
-    setChatInfo(selectChatId, {
-      id: assistantMessageId,
-      text: '',
-      dateTime: formatTime(),
-      status: 'loading',
-      role: 'assistant',
-      requestOptions
-    })
+    const assistantMessageId = refurbishOptions?.id || generateUUID()
+    if (refurbishOptions?.requestOptions.parentMessageId && refurbishOptions?.id) {
+      userMessageId = ''
+      setChatDataInfo(selectChatId, assistantMessageId, {
+        status: 'loading',
+        role: 'assistant',
+        text: '',
+        dateTime: formatTime(),
+        requestOptions
+      })
+    } else {
+      setChatInfo(selectChatId, {
+        id: userMessageId,
+        text: vaule,
+        dateTime: formatTime(),
+        status: 'pass',
+        role: 'user',
+        requestOptions
+      })
+      setChatInfo(selectChatId, {
+        id: assistantMessageId,
+        text: '',
+        dateTime: formatTime(),
+        status: 'loading',
+        role: 'assistant',
+        requestOptions
+      })
+    }
+    
     const controller = new AbortController()
     const signal = controller.signal
     setFetchController(controller)
@@ -217,11 +266,12 @@ ${JSON.stringify(response, null, 4)}
       requestOptions,
       signal,
       userMessageId,
-      assistantMessageId
+      assistantMessageId,
     })
   }
 
   return (
+    
     <div className={styles.chatPage}>
       <Layout
         menuExtraRender={() => <CreateChat />}
@@ -249,6 +299,7 @@ ${JSON.stringify(response, null, 4)}
                   description="是否确定删除会话？"
                   onConfirm={() => {
                     delChat(item.id)
+                    handleMenuClick({ key: '/' + chats[0].id})
                   }}
                   onCancel={() => {
                     // ==== 无操作 ====
@@ -278,6 +329,7 @@ ${JSON.stringify(response, null, 4)}
                     model: e.toString()
                   })
                 }}
+                popupMatchSelectWidth
               />
               <Button
                 block
@@ -318,13 +370,22 @@ ${JSON.stringify(response, null, 4)}
             </Space>
           )
         }}
+        // menuProps={{
+        //   onClick: (r) => {
+        //     const id = r.key.replace('/', '')
+        //     // 查找mysql中对话rooms
+        //     getMysqlChats(id).then(mysqlChats => {
+        //       updateChats(mysqlChats);
+        //     }).catch(error => {
+        //       console.error(error);
+        //     });
+        //     if (selectChatId !== id) {
+        //       changeSelectChatId(id)
+        //     }
+        //   },
+        // }}
         menuProps={{
-          onClick: (r) => {
-            const id = r.key.replace('/', '')
-            if (selectChatId !== id) {
-              changeSelectChatId(id)
-            }
-          }
+          onClick: handleMenuClick,
         }}
       >
         <div className={styles.chatPage_container}>
@@ -338,14 +399,19 @@ ${JSON.stringify(response, null, 4)}
                     status={item.status}
                     content={item.text}
                     time={item.dateTime}
-                    model={item.requestOptions.options?.model}
+                    model={item.requestOptions?.hasOwnProperty('options') ? item.requestOptions.options.model : 'gpt-3.5-turbo'}
                     onDelChatMessage={() => {
                       delChatMessage(selectChatId, item.id)
+                    }}
+                    onRefurbishChatMessage={() => {
+                      console.log('rechat', item)
+                      sendChatCompletions(item.requestOptions.prompt, item)
                     }}
                   />
                 )
               })}
-              {chatMessages.length <= 0 && <Reminder />}
+              {(chatMessages.length <= 0 && loading === false) && <Reminder />}
+              {loading && <LoadingModal />}
             </div>
           </div>
           <div className={styles.chatPage_container_two}>
