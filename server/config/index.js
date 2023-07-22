@@ -24,12 +24,12 @@ function getConfig(key) {
 			port: 8069,
 			password: 'hByk4Nph07jNdQFC3MlQ'
 		},
-		email: 'xxxx',  // 邮件地址
+		email: 'fiyen1993@163.com',  // 邮件地址
 		email_config: {  // 邮件配置信息
-			host: 'smtp.qq.com',  // SMTP服务器地址
-			port: 465,  // SMTP服务器端口号
+			host: 'smtp.163.com',  // SMTP服务器地址
+			port: 25,  // SMTP服务器端口号
 			ignoreTLS: false,  // 是否忽略TLS
-			secure: true,  // 是否使用安全连接
+			secure: false,  // 是否使用安全连接
 			auth: {
 				user: 'xxxx',  // SMTP服务器用户名
 				pass: 'xxxx'  // SMTP服务器密码
