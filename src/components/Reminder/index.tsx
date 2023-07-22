@@ -31,7 +31,7 @@ function Reminder(){
 
     return (
 <div className={styles.reminder}>
-        <h2 className={styles.reminder_title}><img src="https://github.com/fiyen/ChatGPT-Web/blob/main/public/logo.png" alt="" />欢迎来到 {import.meta.env.VITE_APP_TITLE}</h2>
+        <h2 className={styles.reminder_title}><img src="https://www.imageoss.com/images/2023/04/23/robot-logo4987eb2ca3f5ec85.png" alt="" />欢迎来到 {import.meta.env.VITE_APP_TITLE}</h2>
         <p className={styles.reminder_message}>善用AI工具，让AI智能助手协助办公，提升你的工作、学习和科研的效率！</p>
         <p className={styles.reminder_message}><span>Shift</span> + <span>Enter</span> 换行。开头输入 <span>/</span> 召唤 Prompt 角色预设。</p>
         <div className={styles.reminder_question}>
