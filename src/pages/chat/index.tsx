@@ -138,6 +138,7 @@ function ChatPage() {
         console.log(error.name)
       })
 
+    console.log('response: ', response);
     if (!(response instanceof Response)) {
       // 这里返回是错误 ...
       console.log('这里是：', userMessageId)
