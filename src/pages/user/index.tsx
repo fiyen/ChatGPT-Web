@@ -152,18 +152,18 @@ function UserPage() {
             </div>
             {/* 邀请区域 */}
             <div className={styles.userPage_card}>
-{/*               <h4>邀请链接/二维码</h4>
+              <h4>邀请功能已被管理员封禁</h4>
               <div className={styles.userPage_invite}>
                 <QRCode
                   size={160}
-                  value={`${location.origin}/login?invite_code=${user_info?.invite_code}`}
+                  value={`${location.origin}/login?invite_code=${00000000}`}
                   color="#1877ff"
-                /> */}
+                />
                 <div className={styles.userPage_invite_info}>
                   <p className={styles.userPage_invite_info_link}>
-{/*                     <Typography.Paragraph copyable style={{ marginBottom: 0, color: '#1877ff' }}>
-                      邀请链接：{`${location.origin}/login?invite_code=${user_info?.invite_code}`}
-                    </Typography.Paragraph> */}
+                    <Typography.Paragraph copyable style={{ marginBottom: 0, color: '#1877ff' }}>
+                      邀请链接：已停止使用
+                    </Typography.Paragraph>
                   </p>
                   <div
                     dangerouslySetInnerHTML={{
