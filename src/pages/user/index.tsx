@@ -151,19 +151,19 @@ function UserPage() {
               </Space>
             </div>
             {/* 邀请区域 */}
-{/*             <div className={styles.userPage_card}>
-              <h4>邀请链接/二维码</h4>
+            <div className={styles.userPage_card}>
+{/*               <h4>邀请链接/二维码</h4>
               <div className={styles.userPage_invite}>
                 <QRCode
                   size={160}
                   value={`${location.origin}/login?invite_code=${user_info?.invite_code}`}
                   color="#1877ff"
-                />
+                /> */}
                 <div className={styles.userPage_invite_info}>
                   <p className={styles.userPage_invite_info_link}>
-                    <Typography.Paragraph copyable style={{ marginBottom: 0, color: '#1877ff' }}>
+{/*                     <Typography.Paragraph copyable style={{ marginBottom: 0, color: '#1877ff' }}>
                       邀请链接：{`${location.origin}/login?invite_code=${user_info?.invite_code}`}
-                    </Typography.Paragraph>
+                    </Typography.Paragraph> */}
                   </p>
                   <div
                     dangerouslySetInnerHTML={{
@@ -171,7 +171,7 @@ function UserPage() {
                     }}
                   />
                 </div>
-              </div> */}
+              </div>
             </div>
           </Space>
         </div>
