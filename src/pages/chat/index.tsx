@@ -125,6 +125,7 @@ function ChatPage() {
       userMessageId: userMessageId,
       assistantMessageId: assistantMessageId,
     };
+    console.log("newRequestOptions: ", newRequestOptions);
     const response = await postChatCompletions(newRequestOptions, {
       options: {
         signal,
