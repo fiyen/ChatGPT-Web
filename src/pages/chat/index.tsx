@@ -125,11 +125,9 @@ function ChatPage() {
       userMessageId: userMessageId,
       assistantMessageId: assistantMessageId,
     };
-    const timeout = 10000;
     const response = await postChatCompletions(newRequestOptions, {
       options: {
         signal,
-        timeout
       }
     })
       .then((res) => {
