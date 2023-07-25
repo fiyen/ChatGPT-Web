@@ -156,7 +156,7 @@ function UserPage() {
               <div className={styles.userPage_invite}>
                 <QRCode
                   size={160}
-                  value={`${location.origin}/login?invite_code=${00000000}`}
+                  value={`${location.origin}/login?invite_code=${'not valid'}`}
                   color="#1877ff"
                 />
                 <div className={styles.userPage_invite_info}>
