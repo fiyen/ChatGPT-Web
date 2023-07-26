@@ -125,7 +125,7 @@ function ChatPage() {
       userMessageId: userMessageId,
       assistantMessageId: assistantMessageId,
     };
-    console.log("newRequestOptions: ", newRequestOptions);
+    // console.log("newRequestOptions: ", newRequestOptions);
     const response = await postChatCompletions(newRequestOptions, {
       options: {
         signal,
@@ -139,7 +139,7 @@ function ChatPage() {
         console.log(error.name)
       })
 
-    console.log('response: ', response);
+    // console.log('response: ', response);
     if (!(response instanceof Response)) {
       // 这里返回是错误 ...
       console.log('这里是：', userMessageId)
