@@ -40,6 +40,8 @@ export function postChatCompletions(
     options?: { [key: string]: any }
   }
 ) {
+  console.log("params: ", params);
+  console.log("config: ", config);
   return request.postStreams<Response>('/api/chat/completions', params, config)
 }
 
